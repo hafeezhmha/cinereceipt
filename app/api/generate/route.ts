@@ -1,14 +1,6 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import util from 'util';
 import path from 'path';
 import fs from 'fs';
-import dotenv from 'dotenv';
-
-// Load environment variables
-dotenv.config();
-
-const execPromise = util.promisify(exec);
 
 export async function POST(request: Request) {
     try {
@@ -38,53 +30,50 @@ export async function POST(request: Request) {
             return NextResponse.json({ status: 'ready', cached: true });
         }
 
-        // Run Python Script with venv python
-        const scriptPath = path.join(cwd, 'ingest.py');
-        const pythonPath = path.join(cwd, 'venv', 'bin', 'python3');
-        const pythonCmd = fs.existsSync(pythonPath) ? pythonPath : 'python3';
+        // Call Python serverless function
+        const baseUrl = process.env.VERCEL_URL
+            ? `https://${process.env.VERCEL_URL}`
+            : 'http://localhost:3000';
 
-        console.log(`Running ingestion script: ${pythonCmd} ${scriptPath} ${username} ${year}`);
+        console.log(`Calling Python API: ${baseUrl}/api/ingest`);
 
         try {
-            const { stdout, stderr } = await execPromise(`${pythonCmd} ${scriptPath} ${username} ${year}`, {
-                timeout: 300000, // 5 minute timeout (for users with 100+ films)
-                maxBuffer: 1024 * 1024 * 10, // 10MB buffer
-                env: {
-                    ...process.env,
-                    GROQ_API_KEY: process.env.GROQ_API_KEY || ''
-                }
+            const response = await fetch(`${baseUrl}/api/ingest`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, year: yearInt }),
             });
-            if (stderr) console.warn("Script stderr:", stderr);
-            console.log("Script stdout:", stdout);
-        } catch (execErr: any) {
-            console.error("Exec error:", execErr);
 
-            // Check if it's a timeout
-            if (execErr.killed || execErr.signal === 'SIGTERM') {
-                throw new Error(`This is taking longer than expected. The user might have many films logged. Please try again - cached results load instantly!`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Python function failed');
             }
 
-            throw new Error(`Python execution failed: ${execErr.message}`);
-        }
+            const data = await response.json();
 
-        // Verify output
-        if (fs.existsSync(filePath)) {
-            // Check if the file contains an error
-            const fileContent = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-            if (fileContent.error) {
-                // Delete the error file
-                fs.unlinkSync(filePath);
+            // Check for user-level errors
+            if (data.error) {
                 return NextResponse.json({
                     status: 'failed',
-                    error: fileContent.message || 'Failed to fetch data'
+                    error: data.message || 'Failed to fetch data'
                 }, { status: 400 });
             }
 
+            // Save to cache
+            const saveDir = path.join(cwd, 'receipts', username);
+            if (!fs.existsSync(saveDir)) {
+                fs.mkdirSync(saveDir, { recursive: true });
+            }
+            fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+
             console.log(`Success: Generated ${filePath}`);
             return NextResponse.json({ status: 'ready', cached: false });
-        } else {
-            console.error(`Error: File not found at ${filePath}`);
-            return NextResponse.json({ status: 'failed', error: 'Output file not created' }, { status: 500 });
+
+        } catch (fetchErr: any) {
+            console.error("Fetch error:", fetchErr);
+            throw new Error(`Python API call failed: ${fetchErr.message}`);
         }
 
     } catch (error: any) {
