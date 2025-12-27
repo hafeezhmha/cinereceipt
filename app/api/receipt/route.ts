@@ -16,8 +16,10 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Invalid username' }, { status: 400 });
     }
 
-    const cwd = process.cwd();
-    const filePath = path.join(cwd, 'receipts', username, `${year}.json`);
+    // Use /tmp on Vercel, local receipts directory otherwise
+    const isVercel = process.env.VERCEL === '1';
+    const baseDir = isVercel ? '/tmp' : process.cwd();
+    const filePath = path.join(baseDir, 'receipts', username, `${year}.json`);
 
     if (fs.existsSync(filePath)) {
         const data = fs.readFileSync(filePath, 'utf-8');

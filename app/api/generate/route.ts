@@ -22,8 +22,10 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid year' }, { status: 400 });
         }
 
-        const cwd = process.cwd();
-        const filePath = path.join(cwd, 'receipts', username, `${year}.json`);
+        // Use /tmp on Vercel, local receipts directory otherwise
+        const isVercel = process.env.VERCEL === '1';
+        const baseDir = isVercel ? '/tmp' : process.cwd();
+        const filePath = path.join(baseDir, 'receipts', username, `${year}.json`);
 
         // Check cache
         if (fs.existsSync(filePath)) {
@@ -69,7 +71,7 @@ export async function POST(request: Request) {
             }
 
             // Save to cache
-            const saveDir = path.join(cwd, 'receipts', username);
+            const saveDir = path.join(baseDir, 'receipts', username);
             if (!fs.existsSync(saveDir)) {
                 fs.mkdirSync(saveDir, { recursive: true });
             }
