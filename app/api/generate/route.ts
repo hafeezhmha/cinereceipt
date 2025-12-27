@@ -31,9 +31,9 @@ export async function POST(request: Request) {
         }
 
         // Call Python serverless function
-        const baseUrl = process.env.VERCEL_URL
-            ? `https://${process.env.VERCEL_URL}`
-            : 'http://localhost:3000';
+        // Use request origin to ensure correct URL on Vercel
+        const requestUrl = new URL(request.url);
+        const baseUrl = requestUrl.origin;
 
         console.log(`Calling Python API: ${baseUrl}/api/ingest`);
 
