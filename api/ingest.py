@@ -215,6 +215,31 @@ def fetch_letterboxd_data(username, year):
 class handler(BaseHTTPRequestHandler):
     """Vercel serverless handler"""
 
+    def _set_cors_headers(self):
+        """Set CORS headers for all responses"""
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+
+    def do_OPTIONS(self):
+        """Handle preflight requests"""
+        self.send_response(200)
+        self._set_cors_headers()
+        self.end_headers()
+
+    def do_GET(self):
+        """Handle GET requests - return method info"""
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self._set_cors_headers()
+        self.end_headers()
+        response = {
+            "message": "Letterboxd data ingestion API",
+            "method": "POST",
+            "body": {"username": "string", "year": "number"}
+        }
+        self.wfile.write(json.dumps(response).encode())
+
     def do_POST(self):
         try:
             # Read and parse request body
@@ -228,6 +253,7 @@ class handler(BaseHTTPRequestHandler):
             if not username or not year:
                 self.send_response(400)
                 self.send_header('Content-Type', 'application/json')
+                self._set_cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": "Missing username or year"}).encode())
                 return
@@ -236,11 +262,13 @@ class handler(BaseHTTPRequestHandler):
 
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
+            self._set_cors_headers()
             self.end_headers()
             self.wfile.write(json.dumps(result).encode())
 
         except Exception as e:
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
+            self._set_cors_headers()
             self.end_headers()
             self.wfile.write(json.dumps({"error": str(e)}).encode())

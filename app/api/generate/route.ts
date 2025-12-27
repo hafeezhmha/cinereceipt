@@ -46,6 +46,13 @@ export async function POST(request: Request) {
                 body: JSON.stringify({ username, year: yearInt }),
             });
 
+            const contentType = response.headers.get('content-type');
+
+            // Check if we got HTML instead of JSON (404/error page)
+            if (contentType && !contentType.includes('application/json')) {
+                throw new Error('Python API not available. Use "vercel dev" for local development or deploy to Vercel.');
+            }
+
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Python function failed');
