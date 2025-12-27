@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
       beforeFiles: [
         {
           source: '/api/ingest',
-          destination: '/api/ingest.py',
+          destination: '/python-api/ingest',
         },
       ],
     };
