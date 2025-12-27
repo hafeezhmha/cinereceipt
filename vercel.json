@@ -1,6 +1,6 @@
 {
   "functions": {
-    "python-api/ingest.py": {
+    "api/python/*.py": {
       "maxDuration": 300
     }
   }
