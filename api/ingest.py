@@ -2,6 +2,8 @@ import json
 import os
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from http.server import BaseHTTPRequestHandler
+from urllib.parse import parse_qs
 
 try:
     import letterboxdpy.user
@@ -210,32 +212,35 @@ def fetch_letterboxd_data(username, year):
     except Exception as e:
         return {"error": "fetch_failed", "message": str(e)}
 
-def handler(event, context):
+class handler(BaseHTTPRequestHandler):
     """Vercel serverless handler"""
-    try:
-        # Parse request body
-        body = json.loads(event.get('body', '{}'))
-        username = body.get('username')
-        year = body.get('year')
 
-        if not username or not year:
-            return {
-                'statusCode': 400,
-                'headers': {'Content-Type': 'application/json'},
-                'body': json.dumps({"error": "Missing username or year"})
-            }
+    def do_POST(self):
+        try:
+            # Read and parse request body
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            data = json.loads(body) if body else {}
 
-        result = fetch_letterboxd_data(username, int(year))
+            username = data.get('username')
+            year = data.get('year')
 
-        return {
-            'statusCode': 200,
-            'headers': {'Content-Type': 'application/json'},
-            'body': json.dumps(result)
-        }
+            if not username or not year:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Missing username or year"}).encode())
+                return
 
-    except Exception as e:
-        return {
-            'statusCode': 500,
-            'headers': {'Content-Type': 'application/json'},
-            'body': json.dumps({"error": str(e)})
-        }
+            result = fetch_letterboxd_data(username, int(year))
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
+
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
