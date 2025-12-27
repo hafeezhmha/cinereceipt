@@ -1,0 +1,2 @@
+letterboxdpy==5.3.7
+groq==1.0.0
