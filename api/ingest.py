@@ -1,12 +1,15 @@
-import sys
 import json
 import os
 from collections import Counter, defaultdict
-from http.server import BaseHTTPRequestHandler
-import letterboxdpy.user
-import letterboxdpy.movie
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from groq import Groq
+
+try:
+    import letterboxdpy.user
+    import letterboxdpy.movie
+    from groq import Groq
+except ImportError as e:
+    # For debugging
+    pass
 
 def generate_taste_profile(user_data, reviews_data, groq_api_key):
     """Generate AI taste profile using Groq + Llama"""
@@ -56,16 +59,13 @@ Be perceptive, not performative. Natural, not forced. Second person. No film sch
 
         return completion.choices[0].message.content.strip()
 
-    except Exception as e:
-        print(f"Warning: Could not generate taste profile: {e}", file=sys.stderr)
+    except Exception:
         return None
 
 def fetch_letterboxd_data(username, year):
     """Fetch real data from Letterboxd using letterboxdpy"""
     try:
         user = letterboxdpy.user.User(username)
-
-        # Get all diary entries for the year
         diary_data = user.get_diary_year(year)
 
         if not diary_data or 'entries' not in diary_data:
@@ -179,8 +179,8 @@ def fetch_letterboxd_data(username, year):
                         for review_id, review_data in outer_value.items():
                             if isinstance(review_data, dict) and 'movie' in review_data:
                                 reviews_list.append(review_data)
-        except Exception as e:
-            print(f"Warning: Could not fetch reviews: {e}", file=sys.stderr)
+        except Exception:
+            pass
 
         user_data = {
             "username": username,
@@ -208,34 +208,34 @@ def fetch_letterboxd_data(username, year):
         return user_data
 
     except Exception as e:
-        raise Exception(f"Failed to fetch Letterboxd data: {str(e)}")
+        return {"error": "fetch_failed", "message": str(e)}
 
-class handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        try:
-            content_length = int(self.headers['Content-Length'])
-            body = self.rfile.read(content_length)
-            data = json.loads(body)
+def handler(event, context):
+    """Vercel serverless handler"""
+    try:
+        # Parse request body
+        body = json.loads(event.get('body', '{}'))
+        username = body.get('username')
+        year = body.get('year')
 
-            username = data.get('username')
-            year = data.get('year')
+        if not username or not year:
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({"error": "Missing username or year"})
+            }
 
-            if not username or not year:
-                self.send_response(400)
-                self.send_header('Content-type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": "Missing username or year"}).encode())
-                return
+        result = fetch_letterboxd_data(username, int(year))
 
-            result = fetch_letterboxd_data(username, int(year))
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps(result)
+        }
 
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(result).encode())
-
-        except Exception as e:
-            self.send_response(500)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({"error": str(e)}).encode())
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({"error": str(e)})
+        }
