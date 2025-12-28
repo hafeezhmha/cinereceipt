@@ -8,7 +8,11 @@ export default async function ReceiptView({
     searchParams: Promise<{ username: string; year: string }>;
 }) {
     const { username, year } = await searchParams;
-    const filePath = path.join(process.cwd(), 'receipts', username, `${year}.json`);
+
+    // Use /tmp on Vercel, local receipts directory otherwise
+    const isVercel = process.env.VERCEL === '1';
+    const baseDir = isVercel ? '/tmp' : process.cwd();
+    const filePath = path.join(baseDir, 'receipts', username, `${year}.json`);
 
     if (!fs.existsSync(filePath)) {
         return <div className="p-10 font-mono text-red-500">Receipt data not found for {username} ({year})</div>;
