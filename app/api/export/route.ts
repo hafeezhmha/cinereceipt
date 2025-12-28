@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-core';
+import chromiumPkg from '@sparticuz/chromium';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -12,9 +13,27 @@ export async function GET(request: Request) {
 
     try {
         console.log(`Exporting receipt for ${username} (${year})...`);
-        const browser = await chromium.launch({
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
-        });
+
+        // Check if running on Vercel or locally
+        const isVercel = process.env.VERCEL === '1';
+
+        let browser;
+        if (isVercel) {
+            // Use @sparticuz/chromium for Vercel serverless environment
+            const executablePath = await chromiumPkg.executablePath();
+            browser = await chromium.launch({
+                args: chromiumPkg.args,
+                executablePath,
+                headless: chromiumPkg.headless,
+            });
+        } else {
+            // Use local Playwright installation for development
+            const { chromium: localChromium } = await import('playwright');
+            browser = await localChromium.launch({
+                args: ['--no-sandbox', '--disable-setuid-sandbox']
+            });
+        }
+
         const page = await browser.newPage();
 
         // Determine URL
